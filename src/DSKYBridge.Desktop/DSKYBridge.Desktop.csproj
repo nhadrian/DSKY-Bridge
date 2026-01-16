@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>DSKY-Bridge</AssemblyName>
+    <RootNamespace>DSKYBridge</RootNamespace>
+    <ApplicationTitle>DSKY-Bridge</ApplicationTitle>
+    <Product>DSKY-Bridge</Product>
+    <Description>External DSKY Bridge for REENTRY simulator</Description>
+
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0</AssemblyVersion>
+    <FileVersion>1.0.0</FileVersion>
+    <InformationalVersion>1.0.0</InformationalVersion>
+
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <ApplicationIcon>Assets\DSKY.ico</ApplicationIcon>
+
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+  </PropertyGroup>
+
+  <!-- Treat images/fonts as WPF Resources -->
+  <ItemGroup>
+    <Resource Include="Assets\**\*" />
+    <ProjectReference Include="..\DSKYBridge.Core\DSKYBridge.Core.csproj" />
+    <ProjectReference Include="..\DSKYBridge.Infrastructure\DSKYBridge.Infrastructure.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Fleck" Version="1.2.0" />
+  </ItemGroup>
+  
+</Project>
