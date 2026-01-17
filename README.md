@@ -17,13 +17,16 @@ Instructions:</br>
 0. The local PC must be on the same local network than the DSKY replica, and the DSKY replica must be configured to open bridge connection to the local PC.
 1. Run REENTRY game and enable json output in settings, suggested refresh rate is 10Hz.
 2. Then fully load into your mission.
-3. Run the DSKY-Bridge.exe application. 
+3. Run the DSKY-Bridge.exe application (if asked, allow windows firewall) 
 4. If the DSKY replica is configured properly, and the REENTRY is running, everything will work automatically. Enjoy!
 
 Usage
+Use bottom right corner to resize the window if needed.
+Use the top right corner (over the screw head) to close the app.
 The top LCD display print the local IP address to help configuring the DSKY replica.
 The two barber pole indicators display the proper REENTRY incoming and outgoing communications. 
 The borrom IP address displays the IP address of the DSKY replica, if connected.
 The 3-way switch configures the role of the DSKY replica.
+The second DSKY IP address and role switch is only visible when a second device is connected.
 
 <img width="1292" height="818" alt="image" src="https://github.com/user-attachments/assets/c9088b54-0cac-41d4-a159-3d24329997b4" />

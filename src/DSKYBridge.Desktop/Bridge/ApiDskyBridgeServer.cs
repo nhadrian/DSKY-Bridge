@@ -5,27 +5,29 @@ using Fleck;
 using System.Text.Json;
 using System.Threading.Tasks;
 using DSKYBridge.Core.Reentry;
+using System.Threading;
 
 namespace DSKYBridge.Desktop.Bridge
 {
     public sealed class ApiDskyBridgeServer : IDisposable
     {
-    private readonly WebSocketServer _server;
-    private readonly List<IWebSocketConnection> _clients = new();
-    private readonly object _syncRoot = new();
+        private readonly WebSocketServer _server;
+        private readonly List<IWebSocketConnection> _clients = new();
+        private readonly object _syncRoot = new();
 
-    private readonly IReentryCommandSender _commandSender;
-    private readonly Func<bool> _isInCommandModuleProvider;
+        private readonly IReentryCommandSender _commandSender;
+        private readonly Func<string, bool> _isInCommandModuleProvider;
 
-    private string? _lastStateJson;
+        private string? _lastStateJson;
 
         // 🔔 Events for UI
         public event Action<string>? ClientConnected;
-        public event Action? ClientDisconnected;
+        public event Action<string>? ClientDisconnected;
+        private readonly Dictionary<IWebSocketConnection, int> _clientSlots = new();
 
         public ApiDskyBridgeServer(
             IReentryCommandSender commandSender,
-            Func<bool> isInCommandModuleProvider,
+            Func<string, bool> isInCommandModuleProvider,
             string url = "ws://0.0.0.0:3001")   // listen on all interfaces, port 3001
         {
             _commandSender = commandSender;
@@ -40,22 +42,30 @@ namespace DSKYBridge.Desktop.Bridge
 
         public void Start()
         {
-            // Start the WebSocket server. This returns immediately; Fleck handles connections in the background.
             _server.Start(socket =>
             {
                 // NEW CLIENT CONNECTED
                 socket.OnOpen = () =>
                 {
+                    int slot;
+
                     lock (_syncRoot)
                     {
+                        // Assign the lowest free slot (1 or 2)
+                        var taken = _clientSlots.Values.ToList();
+
+                        if (!taken.Contains(1))      slot = 1;
+                        else if (!taken.Contains(2)) slot = 2;
+                        else                         slot = 2; // both used; reuse 2 as a fallback
+
+                        _clientSlots[socket] = slot;
                         _clients.Add(socket);
                     }
 
                     var ip = socket.ConnectionInfo.ClientIpAddress;
                     ClientConnected?.Invoke(ip);
-                    Console.WriteLine($"[Bridge] Client connected from {ip}");
+                    Console.WriteLine($"[Bridge] Client connected from {ip} -> slot {slot}");
 
-                    // Optionally: send last known state immediately
                     if (!string.IsNullOrEmpty(_lastStateJson))
                     {
                         try
@@ -72,34 +82,57 @@ namespace DSKYBridge.Desktop.Bridge
                 // CLIENT DISCONNECTED
                 socket.OnClose = () =>
                 {
+                    int slot;
+                    var ip = socket.ConnectionInfo.ClientIpAddress;
+
                     lock (_syncRoot)
                     {
                         _clients.Remove(socket);
+
+                        if (!_clientSlots.TryGetValue(socket, out slot))
+                            slot = 0;
+
+                        _clientSlots.Remove(socket);
                     }
 
-                    ClientDisconnected?.Invoke();
-                    Console.WriteLine("[Bridge] Client disconnected");
+                    ClientDisconnected?.Invoke(ip);
+                    Console.WriteLine($"[Bridge] Client disconnected ({ip}) from slot {slot}");
                 };
 
                 // ERROR ON CONNECTION
                 socket.OnError = ex =>
                 {
                     Console.WriteLine($"[Bridge] WebSocket error: {ex.Message}");
-                    // Treat any error as a disconnect from the UI perspective
-                    ClientDisconnected?.Invoke();
+                    var ip = socket.ConnectionInfo.ClientIpAddress;
+
+                    lock (_syncRoot)
+                    {
+                        _clients.Remove(socket);
+                        _clientSlots.Remove(socket);
+                    }
+
+                    ClientDisconnected?.Invoke(ip);
                 };
 
                 // MESSAGE FROM CLIENT (keyboard input)
                 socket.OnMessage = async message =>
                 {
-                    // message is string (UTF-8 text) – this matches what api-dsky sends
+                    int slot;
+                    lock (_syncRoot)
+                    {
+                        if (!_clientSlots.TryGetValue(socket, out slot))
+                            slot = 1; // default to slot 1 if something went wrong
+                    }
+
+                    var slotId = slot.ToString(); // "1" or "2"
+
                     try
                     {
-                        await HandleKeyPressAsync(message);
+                        await HandleKeyPressAsync(message, slotId);
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"[Bridge] Error handling key press: {ex.Message}");
+                        Console.WriteLine($"[Bridge] Error handling key press from slot {slotId}: {ex.Message}");
                     }
                 };
             });
@@ -155,7 +188,66 @@ namespace DSKYBridge.Desktop.Bridge
             return Task.CompletedTask;
         }
 
-        private async Task HandleKeyPressAsync(string payload)
+        public Task BroadcastStatePerSlotAsync(Func<int, object> stateSelector, CancellationToken ct = default)
+        {
+            List<(IWebSocketConnection socket, int slot)> clients;
+
+            lock (_syncRoot)
+            {
+                clients = _clients
+                    .Select(c =>
+                    {
+                        int slot = 1;
+                        if (!_clientSlots.TryGetValue(c, out slot))
+                            slot = 1;
+                        return (c, slot);
+                    })
+                    .ToList();
+            }
+
+            foreach (var (client, slot) in clients)
+            {
+                if (ct.IsCancellationRequested)
+                    break;
+
+                if (!client.IsAvailable)
+                    continue;
+
+                object stateObj;
+                string json;
+
+                try
+                {
+                    stateObj = stateSelector(slot);
+                    json = JsonSerializer.Serialize(stateObj, new JsonSerializerOptions
+                    {
+                        PropertyNamingPolicy = null
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[Bridge] Failed to build or serialize state for slot {slot}: {ex.Message}");
+                    continue;
+                }
+
+                // Remember the last JSON globally so new connections
+                // can get a snapshot in OnOpen if needed.
+                _lastStateJson = json;
+
+                try
+                {
+                    client.Send(json);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[Bridge] Error sending state to client in slot {slot}: {ex.Message}");
+                }
+            }
+
+            return Task.CompletedTask;
+        }
+
+        private async Task HandleKeyPressAsync(string payload, string clientSlotId)
         {
             if (string.IsNullOrWhiteSpace(payload))
                 return;
@@ -165,12 +257,12 @@ namespace DSKYBridge.Desktop.Bridge
             if (!TryMapCharToAgcKey(keyChar, out var agcKey))
                 return;
 
-            bool isInCommandModule = _isInCommandModuleProvider();
+            bool isInCommandModule = _isInCommandModuleProvider(clientSlotId);
 
             try
             {
                 await _commandSender.SendKeyAsync(agcKey, isInCommandModule);
-                Console.WriteLine($"[Bridge] Key '{keyChar}' -> {(isInCommandModule ? "CMC" : "LMC")}");
+                Console.WriteLine($"[Bridge] Key '{keyChar}' from slot {clientSlotId} -> {(isInCommandModule ? "CMC" : "LMC")}");
             }
             catch (Exception ex)
             {

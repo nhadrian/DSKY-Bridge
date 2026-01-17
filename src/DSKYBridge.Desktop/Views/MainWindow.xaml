@@ -172,6 +172,41 @@
                                    Click="SwDn_Click"/>
                      </Grid>
 
+                     <Grid x:Name="DskyControl2" Visibility="Collapsed" Panel.ZIndex="2" Margin="0,480,0,0" HorizontalAlignment="Left" VerticalAlignment="Top">
+                            <!-- DSKY IP address -->
+                            <Label x:Name="DskyIP2" Content="000 000 000 000" Margin="50, 68,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" 
+                                   Foreground="#FF03A95A" FontSize="54" FontFamily="pack://application:,,,/Assets/Fonts/#Zerlina" Width="600" Panel.ZIndex="5"/>
+
+                            <!-- LCD background image -->
+                            <Image x:Name="LCD2" Height="158" Width="570" Stretch="Fill" Margin="18, 0,0,0" HorizontalAlignment="Left" VerticalAlignment="Top"
+                                   Source="pack://application:,,,/Assets/Images/lcd.png"
+                                   Panel.ZIndex="2" IsHitTestVisible="False" Visibility="Visible"/>
+
+                            <!-- Switch background image -->
+                            <Image x:Name="SwCase2" Height="190" Width="190" Stretch="Fill" Margin="588,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Top"
+                                   Source="pack://application:,,,/Assets/Images/switch_case.png"
+                                   Panel.ZIndex="2" IsHitTestVisible="False" Visibility="Visible"/>
+
+                            <!-- Switch image -->
+                            <Image x:Name="SwArm2" Height="190" Width="84" Stretch="Fill" Margin="621,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Top"
+                                   Source="pack://application:,,,/Assets/Images/switch_ctr.png"
+                                   Panel.ZIndex="3" IsHitTestVisible="False" Visibility="Visible"/>
+
+                            <!-- Hitbox buttons (ON TOP of everything) -->
+                            <Button x:Name="SwUp2"   Style="{StaticResource HitBoxButtonStyle}" Panel.ZIndex="20"
+                                   Margin="607,18,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Width="165" Height="44"
+                                   Click="SwUp2_Click"/>
+
+                            <Button x:Name="SwCtr2"   Style="{StaticResource HitBoxButtonStyle}" Panel.ZIndex="20"
+                                   Margin="607,71,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Width="165" Height="44"
+                                   Click="SwCtr2_Click"/>
+
+                            <Button x:Name="SwDn2"   Style="{StaticResource HitBoxButtonStyle}" Panel.ZIndex="20"
+                                   Margin="607,123,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Width="165" Height="44"
+                                   Click="SwDn2_Click"/>
+
+                     </Grid>
+
                      <!-- Close button: top-right, only visible when hovered -->
                      <Button x:Name="CloseButton" Style="{StaticResource HoverOnlyIconButtonStyle}" Panel.ZIndex="50"
                             Margin="747,16,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Width="36" Height="36"

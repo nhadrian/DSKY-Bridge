@@ -38,11 +38,22 @@ namespace DSKYBridge
         private readonly DispatcherTimer _pollTimer;
         private bool _readerRunning;
         private int _dskyMode = 1;
+        private int _dskyMode2 = 1;
+                // Which client IP is which DSKY slot
+        private string? _client1Ip;
+        private string? _client2Ip;
         private const string ImgBase = "pack://application:,,,/Assets/Images/";
 
-        /// <summary>
+        private const double NormalWidth = 800.0;
+        private const double NormalHeight = 500.0;
+        private const double ExtendedWidth = 800.0;
+        private const double ExtendedHeight = 700.0;
+
+        private string? _primaryDskyIp;
+        private string? _secondaryDskyIp;
+        private bool _hasSecondClient;
+
         /// Check whether the Reentry UDP port (127.0.0.1:8051) currently has a listener.
-        /// </summary>
         private static bool IsReentryPortOpen()
         {
             try
@@ -149,6 +160,103 @@ namespace DSKYBridge
             return FormatIpBlocks(ipv4);
         }
 
+        private void OnBridgeClientConnected(string ip)
+        {
+            var formatted = FormatIpBlocks(ip);
+
+            if (_primaryDskyIp == null)
+            {
+                // First client → main row
+                _primaryDskyIp = ip;
+                DskyIP.Content = formatted;
+            }
+            else if (_secondaryDskyIp == null)
+            {
+                // Second client → second row
+                _secondaryDskyIp = ip;
+                DskyIP2.Content = formatted;
+            }
+            else
+            {
+                // Already two clients; reuse the second slot
+                _secondaryDskyIp = ip;
+                DskyIP2.Content = formatted;
+            }
+
+            _hasSecondClient = _secondaryDskyIp != null;
+            ApplyClientLayout();
+        }
+
+        private void OnBridgeClientDisconnected(string ip)
+        {
+            bool changed = false;
+
+            if (_primaryDskyIp != null &&
+                string.Equals(_primaryDskyIp, ip, StringComparison.OrdinalIgnoreCase))
+            {
+                if (_secondaryDskyIp != null)
+                {
+                    // Promote the second slot to primary if it exists
+                    _primaryDskyIp = _secondaryDskyIp;
+                    DskyIP.Content = DskyIP2.Content;
+
+                    _secondaryDskyIp = null;
+                    DskyIP2.Content = "000 000 000 000";
+                }
+                else
+                {
+                    _primaryDskyIp = null;
+                    DskyIP.Content = "000 000 000 000";
+                }
+
+                changed = true;
+            }
+            else if (_secondaryDskyIp != null &&
+                    string.Equals(_secondaryDskyIp, ip, StringComparison.OrdinalIgnoreCase))
+            {
+                _secondaryDskyIp = null;
+                DskyIP2.Content = "000 000 000 000";
+                changed = true;
+            }
+
+            if (changed)
+            {
+                _hasSecondClient = _secondaryDskyIp != null;
+                ApplyClientLayout();
+            }
+        }
+
+        private void ApplyClientLayout()
+        {
+            if (_hasSecondClient)
+            {
+                // Show the second DSKY control row and grow the main design surface
+                DskyControl2.Visibility = Visibility.Visible;
+
+                RootGrid.Height = ExtendedHeight;
+                _aspectRatio = ExtendedWidth / ExtendedHeight;
+
+                // Snap the window to the requested 800x700
+                Width = ExtendedWidth;
+                Height = ExtendedHeight;
+            }
+            else
+            {
+                // Only one (or zero) clients → collapse the second row
+                DskyControl2.Visibility = Visibility.Collapsed;
+
+                RootGrid.Height = NormalHeight;
+                _aspectRatio = NormalWidth / NormalHeight;
+
+                Width = NormalWidth;
+                Height = NormalHeight;
+            }
+
+            // Make sure the aspect-ratio logic doesn't immediately fight this change
+            _ignoreNextSizeChanged = true;
+            EnforceAspectRatioOnce();
+        }
+
         public MainWindow()
         {
             InitializeComponent();
@@ -171,6 +279,7 @@ namespace DSKYBridge
             // At this point, all XAML controls (including LocalIP) are created, so it's safe to use them.
             LocalIP.Content = GetLocalIPv4();
             DskyIP.Content = "000 000 000 000";
+            DskyIP2.Content = "000 000 000 000";
 
             MouseDown += Window_MouseDown;
             SizeChanged += Window_SizeChanged; // aspect-ratio enforcement (works even without XAML hook)
@@ -185,27 +294,86 @@ namespace DSKYBridge
 
             _bridgeServer = new ApiDskyBridgeServer(
                 _commandSender,
-                GetIsInCommandModule,
+                GetIsInCommandModuleForClient,   // NEW: per-client mode
                 url: "ws://0.0.0.0:3001");
 
-            // When api-dsky connects/disconnects, update the IP label
+            // When api-dsky clients connect, assign them to slot 1 or 2
             _bridgeServer.ClientConnected += ip =>
             {
                 Dispatcher.Invoke(() =>
                 {
-                    DskyIP.Content = FormatIpBlocks(ip);
+                    var formatted = FormatIpBlocks(ip);
+
+                    if (_client1Ip == null)
+                    {
+                        _client1Ip = ip;
+                        DskyIP.Content = formatted;
+                    }
+                    else if (_client2Ip == null)
+                    {
+                        _client2Ip = ip;
+                        DskyIP2.Content = formatted;
+
+                        // You already have logic to show DskyControl2 + resize;
+                        // if not, this is a safe place to do it:
+                        DskyControl2.Visibility = Visibility.Visible;
+
+                        RootGrid.Height = 700;
+                        _aspectRatio = 800.0 / 700.0;
+                        Width = 800.0;
+                        Height = 700.0;
+                        _ignoreNextSizeChanged = true;
+                        EnforceAspectRatioOnce();
+                    }
+                    else
+                    {
+                        // More than two clients: ignore or reuse a slot if you like
+                        Console.WriteLine($"[DSKY-Bridge] Extra client connected from {ip}, but both slots are already used.");
+                    }
                 });
             };
 
-            _bridgeServer.ClientDisconnected += () =>
+            // If your ApiDskyBridgeServer.ClientDisconnected still has no IP parameter,
+            // you can leave this as-is or adjust once you add the IP there.
+            // For _dskyMode2 routing we don't strictly need to clear the mapping.
+            _bridgeServer.ClientDisconnected += ip =>
             {
                 Dispatcher.Invoke(() =>
                 {
-                    DskyIP.Content = "000 000 000 000";
+                    // FIRST connection (slot 1) broke
+                    if (_client1Ip != null &&
+                        string.Equals(_client1Ip, ip, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _client1Ip = null;
+                        DskyIP.Content = "000 000 000 000";
+                        // We do NOT touch DskyControl2 here – second DSKY can stay visible
+                    }
+                    // SECOND connection (slot 2) broke
+                    else if (_client2Ip != null &&
+                            string.Equals(_client2Ip, ip, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _client2Ip = null;
+                        DskyIP2.Content = "000 000 000 000";
+
+                        // Hide the second DSKY grid and revert to 800×500
+                        DskyControl2.Visibility = Visibility.Collapsed;
+
+                        RootGrid.Height = NormalHeight;
+                        _aspectRatio = NormalWidth / NormalHeight;
+
+                        Width = NormalWidth;
+                        Height = NormalHeight;
+                        _ignoreNextSizeChanged = true;
+                        EnforceAspectRatioOnce();
+                    }
+
+                    // Optional: refresh the link LEDs after a disconnect
+                    UpdateLinkIndicators();
                 });
             };
 
             _bridgeServer.Start();
+
 
             _pollTimer = new DispatcherTimer
             {
@@ -408,7 +576,7 @@ namespace DSKYBridge
 
                 // Build and broadcast current DSKY state to api-dsky
                 var state = BuildBridgeState();
-                await _bridgeServer.BroadcastStateAsync(state);
+                await _bridgeServer.BroadcastStatePerSlotAsync(slot => BuildBridgeStateForSlot(slot));
             }
             else
             {
@@ -602,9 +770,9 @@ namespace DSKYBridge
             DragMove();
         }
 
-        private object BuildBridgeState()
+        private object BuildBridgeStateForSlot(int slot)
         {
-            bool isCm = GetIsInCommandModule();
+            bool isCm = GetIsInCommandModule(slot == 2 ? _dskyMode2 : _dskyMode);
 
             // --- CMC branch ---------------------------------------------------------
             if (isCm && _lastAgcValues is CMCValues agc)
@@ -801,18 +969,42 @@ namespace DSKYBridge
                 Standby = true
             };
         }
- 
+
+        // NEW: per-slot version of BuildBridgeState
+        private object BuildBridgeState()
+        {
+            // Default to slot 1 (primary DSKY)
+            return BuildBridgeStateForSlot(1);
+        }
 
         //helper to determine if we're in CMC or LMC based on _dskyMode and json values
-        private bool GetIsInCommandModule()
+        // Helper: interpret a mode value (CMC/LMC/AUTO) into "is CM?"
+        private bool GetIsInCommandModule(int mode)
         {
-            // You can refine this logic, but this is a good starting point.
-            return _dskyMode switch
+            return mode switch
             {
                 CMC  => true,
                 LMC  => false,
                 AUTO => _lastAgcValues?.IsInCM ?? true, // prefer AGC if present
                 _    => true
+            };
+        }
+
+        // Existing parameterless version keeps working for your display logic
+        private bool GetIsInCommandModule()
+        {
+            return GetIsInCommandModule(_dskyMode);
+        }
+
+        // NEW: per-client routing, based on which slot the IP belongs to
+        // NEW: per-client routing, based on connection slot ("1" or "2")
+        private bool GetIsInCommandModuleForClient(string clientSlotId)
+        {
+            return clientSlotId switch
+            {
+                "2" => GetIsInCommandModule(_dskyMode2), // second DSKY
+                "1" => GetIsInCommandModule(_dskyMode),  // first DSKY
+                _   => GetIsInCommandModule(_dskyMode)   // fallback
             };
         }
 
@@ -862,6 +1054,24 @@ namespace DSKYBridge
         {
             _dskyMode = LMC;
             SwArm.Source = new BitmapImage(new Uri(ImgBase + "switch_dn.png"));
+        }
+
+        private void SwUp2_Click(object sender, RoutedEventArgs e)
+        {
+            _dskyMode2 = CMC;
+            SwArm2.Source = new BitmapImage(new Uri(ImgBase + "switch_up.png"));
+        }
+
+        private void SwCtr2_Click(object sender, RoutedEventArgs e)
+        {
+            _dskyMode2 = AUTO;
+            SwArm2.Source = new BitmapImage(new Uri(ImgBase + "switch_ctr.png"));
+        }
+
+        private void SwDn2_Click(object sender, RoutedEventArgs e)
+        {
+            _dskyMode2 = LMC;
+            SwArm2.Source = new BitmapImage(new Uri(ImgBase + "switch_dn.png"));
         }
 
         private void FunctionalButton_MouseDown(object sender, MouseButtonEventArgs e)
