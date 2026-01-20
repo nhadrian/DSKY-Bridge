@@ -18,6 +18,7 @@ using System.Net.Sockets;
 using System.Net.NetworkInformation;
 using DSKYBridge.Desktop.Bridge;
 using System.Linq;
+using Makaretu.Dns;
 
 namespace DSKYBridge
 {
@@ -52,6 +53,14 @@ namespace DSKYBridge
         private string? _primaryDskyIp;
         private string? _secondaryDskyIp;
         private bool _hasSecondClient;
+        private const int WebSocketPort = 3000;
+
+        // TODO: set this to whatever service type next-dsky actually browses for.
+        // This is a *guess*; check the next-dsky docs/source.
+        private const string MdnsServiceType = "_dsky._tcp";
+
+        private ServiceDiscovery? _mdns;
+        private ServiceProfile? _mdnsProfile;
 
         /// Check whether the Reentry UDP port (127.0.0.1:8051) currently has a listener.
         private static bool IsReentryPortOpen()
@@ -120,46 +129,14 @@ namespace DSKYBridge
                         : "000"));
         }
 
-        private static string GetLocalIPv4()
+        // Get the local IPv4 address formatted for display.
+        private static string GetDisplayPrimaryIPv4()
         {
-            string? ipv4 = null;
-
-            // Primary: default route detection via UDP connect trick
-            try
-            {
-                using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, 0);
-                socket.Connect("8.8.8.8", 65530);
-                if (socket.LocalEndPoint is IPEndPoint ep)
-                    ipv4 = ep.Address.ToString();
-            }
-            catch { }
-
-            // Fallback: first active non-loopback IPv4
-            if (ipv4 == null)
-            {
-                foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
-                {
-                    if (ni.OperationalStatus != OperationalStatus.Up)
-                        continue;
-                    if (ni.NetworkInterfaceType == NetworkInterfaceType.Loopback)
-                        continue;
-
-                    var props = ni.GetIPProperties();
-                    foreach (var addr in props.UnicastAddresses)
-                    {
-                        if (addr.Address.AddressFamily == AddressFamily.InterNetwork)
-                        {
-                            ipv4 = addr.Address.ToString();
-                            break;
-                        }
-                    }
-                    if (ipv4 != null) break;
-                }
-            }
-
-            return FormatIpBlocks(ipv4);
+            var ip = GetPrimaryUnicastIPv4Address();
+            return FormatIpBlocks(ip?.ToString());
         }
 
+        /// Handle a new api-dsky client connection.
         private void OnBridgeClientConnected(string ip)
         {
             var formatted = FormatIpBlocks(ip);
@@ -257,6 +234,56 @@ namespace DSKYBridge
             EnforceAspectRatioOnce();
         }
 
+        /// Attempt to get the primary IPv4 address of the machine.
+        private static IPAddress? GetPrimaryUnicastIPv4Address()
+        {
+            // 1) Prefer the interface that has the default route (has a gateway)
+            try
+            {
+                using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, 0);
+                // This doesn't actually send traffic, it just forces routing decision
+                socket.Connect("8.8.8.8", 65530);
+                if (socket.LocalEndPoint is IPEndPoint ep)
+                    return ep.Address;
+            }
+            catch
+            {
+                // ignore and fall back
+            }
+
+            // 2) Fallback: pick an interface that has an IPv4 gateway
+            foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (ni.OperationalStatus != OperationalStatus.Up)
+                    continue;
+
+                if (ni.NetworkInterfaceType == NetworkInterfaceType.Loopback ||
+                    ni.NetworkInterfaceType == NetworkInterfaceType.Tunnel)
+                    continue;
+
+                var props = ni.GetIPProperties();
+
+                // require an IPv4 gateway (this is your "has gateway" filter)
+                bool hasIpv4Gateway = props.GatewayAddresses.Any(g =>
+                    g.Address.AddressFamily == AddressFamily.InterNetwork &&
+                    !IPAddress.IsLoopback(g.Address) &&
+                    !g.Address.Equals(IPAddress.Any) &&
+                    !g.Address.Equals(IPAddress.None));
+
+                if (!hasIpv4Gateway)
+                    continue;
+
+                var ipInfo = props.UnicastAddresses
+                    .FirstOrDefault(u => u.Address.AddressFamily == AddressFamily.InterNetwork);
+
+                if (ipInfo != null)
+                    return ipInfo.Address;
+            }
+
+            // Nothing suitable found
+            return null;
+        }
+
         public MainWindow()
         {
             InitializeComponent();
@@ -277,7 +304,7 @@ namespace DSKYBridge
             };
 
             // At this point, all XAML controls (including LocalIP) are created, so it's safe to use them.
-            LocalIP.Content = GetLocalIPv4();
+            LocalIP.Content = GetDisplayPrimaryIPv4();
             DskyIP.Content = "000 000 000 000";
             DskyIP2.Content = "000 000 000 000";
 
@@ -295,7 +322,47 @@ namespace DSKYBridge
             _bridgeServer = new ApiDskyBridgeServer(
                 _commandSender,
                 GetIsInCommandModuleForClient,   // NEW: per-client mode
-                url: "ws://0.0.0.0:3001");
+                url: $"ws://0.0.0.0:{WebSocketPort}");
+
+            try
+            {
+                _mdns = new ServiceDiscovery();
+
+                // Instance name can be anything human-readable
+                var hostName = System.Net.Dns.GetHostName();
+                var instanceName = $"DSKY Bridge ({hostName})";
+
+                // Get primary IPv4 address to advertise
+                var primaryAddress = GetPrimaryUnicastIPv4Address();
+
+                if (primaryAddress == null)
+                {
+                    Console.WriteLine("[mDNS] No suitable IPv4 address found to advertise.");
+                }
+                else
+                {
+                    var addresses = new[] { primaryAddress };
+
+                    Console.WriteLine("[mDNS] Advertising IP: " + primaryAddress);
+
+                    _mdnsProfile = new ServiceProfile(
+                        instanceName,
+                        MdnsServiceType,
+                        (ushort)WebSocketPort,
+                        addresses);
+
+                    _mdnsProfile.AddProperty("wsPath", "/ws");
+                    _mdnsProfile.AddProperty("version", "1.0.0");
+                    _mdnsProfile.AddProperty("mode", "bridge");
+                    _mdnsProfile.AddProperty("hostname", hostName);
+
+                    _mdns.Advertise(_mdnsProfile);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[mDNS] Failed to start mDNS advertising: {ex.Message}");
+            }
 
             // When api-dsky clients connect, assign them to slot 1 or 2
             _bridgeServer.ClientConnected += ip =>
@@ -718,6 +785,18 @@ namespace DSKYBridge
             {
                 try { d.Dispose(); } catch { /* ignore */ }
             }
+
+            // Stop advertising mDNS
+            try
+            {
+                if (_mdnsProfile != null && _mdns != null)
+                {
+                    _mdns.Unadvertise(_mdnsProfile);
+                }
+
+                _mdns?.Dispose();
+            }
+            catch { /* ignore */ }
 
             try { _bridgeServer.Dispose(); } catch { /* ignore */ }
 

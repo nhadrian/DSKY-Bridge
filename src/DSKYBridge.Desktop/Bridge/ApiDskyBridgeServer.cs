@@ -28,16 +28,13 @@ namespace DSKYBridge.Desktop.Bridge
         public ApiDskyBridgeServer(
             IReentryCommandSender commandSender,
             Func<string, bool> isInCommandModuleProvider,
-            string url = "ws://0.0.0.0:3001")   // listen on all interfaces, port 3001
+            string url = "ws://0.0.0.0:3000")   // listen on all interfaces, port 3000
         {
             _commandSender = commandSender;
             _isInCommandModuleProvider = isInCommandModuleProvider;
 
-            _server = new WebSocketServer(url)
-            {
-                // Optional: explicitly support the "echo-protocol" subprotocol used by api-dsky
-                SupportedSubProtocols = new[] { "echo-protocol" }
-            };
+            // Accept connections from any WebSocket client (no subprotocol requirement).
+            _server = new WebSocketServer(url);
         }
 
         public void Start()
@@ -137,7 +134,7 @@ namespace DSKYBridge.Desktop.Bridge
                 };
             });
 
-            Console.WriteLine("[Bridge] WebSocket server listening on ws://0.0.0.0:3001");
+            Console.WriteLine("[Bridge] WebSocket server listening on ws://0.0.0.0:3000");
         }
 
         public Task BroadcastStateAsync(object state, CancellationToken ct = default)

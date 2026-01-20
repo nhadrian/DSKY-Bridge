@@ -4,7 +4,7 @@
 		<UnoPlatformIDEVersion>1.108.1</UnoPlatformIDEVersion>
 		<UnoPlatformExtension>unoplatform.vscode 0.23.15</UnoPlatformExtension>
 		<UnoRemoteControlPort>0</UnoRemoteControlPort>
-		<UnoVSCodeCSharpExtension>ms-dotnettools.csharp 2.112.45</UnoVSCodeCSharpExtension>
-		<UnoVSCodeCSharpDevKitExtension>ms-dotnettools.csdevkit 1.92.5</UnoVSCodeCSharpDevKitExtension>
+		<UnoVSCodeCSharpExtension>ms-dotnettools.csharp 2.110.4</UnoVSCodeCSharpExtension>
+		<UnoVSCodeCSharpDevKitExtension>ms-dotnettools.csdevkit 1.90.2</UnoVSCodeCSharpDevKitExtension>
 	</PropertyGroup>
 </Project>
