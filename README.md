@@ -29,4 +29,9 @@ The borrom IP address displays the IP address of the DSKY replica, if connected.
 The 3-way switch configures the role of the DSKY replica.
 The second DSKY IP address and role switch is only visible when a second device is connected.
 
+Single DSKY connection:
 <img width="1292" height="818" alt="image" src="https://github.com/user-attachments/assets/c9088b54-0cac-41d4-a159-3d24329997b4" />
+
+Dual DSKY connection with different roles:
+<img width="1298" height="1123" alt="image" src="https://github.com/user-attachments/assets/8e69bf98-f2fb-4293-b3ed-97ff868055ac" />
+
