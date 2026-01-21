@@ -1224,7 +1224,7 @@ namespace DSKYBridge
             float value,
             float originalMin,
             float originalMax,
-            int targetMin = 1,
+            int targetMin = 0,
             int targetMax = 127)
         {
             if (originalMax <= originalMin)
