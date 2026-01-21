@@ -32,6 +32,9 @@ Usage
 Single DSKY connection:
 <img width="1292" height="818" alt="image" src="https://github.com/user-attachments/assets/c9088b54-0cac-41d4-a159-3d24329997b4" />
 
+IP selection (override the default choosen):
+<img width="1271" height="807" alt="image" src="https://github.com/user-attachments/assets/d0811dff-68d3-4605-84f1-d04c41c5256f" />
+
 Dual DSKY connection with different roles:
 <img width="1298" height="1123" alt="image" src="https://github.com/user-attachments/assets/8e69bf98-f2fb-4293-b3ed-97ff868055ac" />
 
