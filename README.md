@@ -21,13 +21,13 @@ Instructions:</br>
 4. If the DSKY replica is configured properly, and the REENTRY is running, everything will work automatically. Enjoy!
 
 Usage
-Use bottom right corner to resize the window if needed.
-Use the top right corner (over the screw head) to close the app.
-The top LCD display print the local IP address to help configuring the DSKY replica.
-The two barber pole indicators display the proper REENTRY incoming and outgoing communications. 
-The borrom IP address displays the IP address of the DSKY replica, if connected.
-The 3-way switch configures the role of the DSKY replica.
-The second DSKY IP address and role switch is only visible when a second device is connected.
+- Use bottom right corner to resize the window if needed.
+- Use the top right corner (over the screw head) to close the app.
+- The top LCD display print the local IP address to help configuring the DSKY replica, if you want to change the default, click on the IP address, and choose from the drop-down list.
+- The two barber pole indicators display the proper REENTRY incoming and outgoing communications. 
+- The borrom IP address displays the IP address of the DSKY replica, if connected.
+- The 3-way switch configures the role of the DSKY replica.
+- The second DSKY IP address and role switch is only visible when a second device is connected.
 
 Single DSKY connection:
 <img width="1292" height="818" alt="image" src="https://github.com/user-attachments/assets/c9088b54-0cac-41d4-a159-3d24329997b4" />

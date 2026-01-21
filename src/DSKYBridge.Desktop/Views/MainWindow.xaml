@@ -112,15 +112,15 @@
                      </Border>
 
                      <!-- Header label -->
-                     <Label x:Name="Header" Content="EXTERNAL DSKY REENTRY BRIDGE" Margin="120, 10,0,0" HorizontalAlignment="Left" VerticalAlignment="Top"
+                     <Label x:Name="Header" Content="EXTERNAL DSKY REENTRY BRIDGE" Margin="120,10,0,0" HorizontalAlignment="Left" VerticalAlignment="Top"
                             Foreground="#FFFFFFFF" FontSize="28" FontFamily="pack://application:,,,/Assets/Fonts/#Gorton" Width="800" Panel.ZIndex="5"/>
 
                      <!-- Local IP Address -->
-                     <Label x:Name="LocalIP" Content="000 000 000 000" Margin="50, 155,0,0" HorizontalAlignment="Left" VerticalAlignment="Top"
+                     <Label x:Name="LocalIP" Content="000 000 000 000" Margin="50,155,0,0" HorizontalAlignment="Left" VerticalAlignment="Top"
                             Foreground="#FF03A95A" FontSize="54" FontFamily="pack://application:,,,/Assets/Fonts/#Zerlina" Width="600" Panel.ZIndex="5"/>
 
                      <!-- Local IP LCD background image -->
-                     <Image x:Name="LocalLCD" Height="158" Width="570" Stretch="Fill" Margin="18, 87,0,0" HorizontalAlignment="Left" VerticalAlignment="Top"
+                     <Image x:Name="LocalLCD" Height="158" Width="570" Stretch="Fill" Margin="18,87,0,0" HorizontalAlignment="Left" VerticalAlignment="Top"
                             Source="pack://application:,,,/Assets/Images/lcd_local.png"
                             Panel.ZIndex="2" IsHitTestVisible="False" Visibility="Visible"/>
 
@@ -136,6 +136,29 @@
                             <Image x:Name="DownLink" Height="31" Width="31" Stretch="Fill" Margin="115,93,0,0" HorizontalAlignment="Left" VerticalAlignment="Top"
                                    Source="pack://application:,,,/Assets/Images/ind_error.png"
                                    Panel.ZIndex="2" IsHitTestVisible="False" Visibility="Visible"/>
+                     </Grid>
+
+                     <Grid x:Name="Menu1" Visibility="Collapsed" Panel.ZIndex="10" Margin="50,230,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Width="700">
+                            <Border SnapsToDevicePixels="True"
+                                          Background="#FF272113"
+                                          BorderBrush="#FF000000"
+                                          BorderThickness="4"
+                                          CornerRadius="12"
+                                          Padding="12">
+                                   <Grid>
+                                          <ListBox x:Name="IpListBox"
+                                                 Margin="10,10,0,0"
+                                                 HorizontalAlignment="Left"
+                                                 VerticalAlignment="Top"
+                                                 Foreground="#FF03A95A"
+                                                 Background="#00000000"
+                                                 BorderThickness="0"
+                                                 FontSize="28"
+                                                 DisplayMemberPath="Display"
+                                                 SelectionMode="Single"
+                                                 MouseLeftButtonUp="IpListBox_MouseLeftButtonUp" />
+                                   </Grid>
+                            </Border>
                      </Grid>
 
                      <Grid x:Name="DskyControl1" Visibility="Visible" Panel.ZIndex="2" Margin="0,280,0,0" HorizontalAlignment="Left" VerticalAlignment="Top">
@@ -206,6 +229,10 @@
                                    Click="SwDn2_Click"/>
 
                      </Grid>
+
+                     <Button x:Name="OpenMenu"   Style="{StaticResource HitBoxButtonStyle}" Panel.ZIndex="20"
+                            Margin="23,150,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Width="560" Height="60"
+                            Click="OpenMenu_Click"/>
 
                      <!-- Close button: top-right, only visible when hovered -->
                      <Button x:Name="CloseButton" Style="{StaticResource HoverOnlyIconButtonStyle}" Panel.ZIndex="50"

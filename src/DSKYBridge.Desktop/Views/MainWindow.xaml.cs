@@ -19,6 +19,8 @@ using System.Net.NetworkInformation;
 using DSKYBridge.Desktop.Bridge;
 using System.Linq;
 using Makaretu.Dns;
+using System.Windows.Controls;
+using System.Collections.Generic;
 
 namespace DSKYBridge
 {
@@ -43,6 +45,16 @@ namespace DSKYBridge
                 // Which client IP is which DSKY slot
         private string? _client1Ip;
         private string? _client2Ip;
+
+        // Currently selected local IP address (override-able by the user)
+        private IPAddress? _selectedLocalIp;
+
+        // For reusing mDNS instance name and hostname when we re-advertise
+        private string? _mdnsInstanceName;
+        private string? _mdnsHostName;
+
+        // List of IP options shown in the overlay menu
+        private readonly List<IpOption> _ipOptions = new();
         private const string ImgBase = "pack://application:,,,/Assets/Images/";
 
         private const double NormalWidth = 800.0;
@@ -134,6 +146,14 @@ namespace DSKYBridge
         {
             var ip = GetPrimaryUnicastIPv4Address();
             return FormatIpBlocks(ip?.ToString());
+        }
+
+        private sealed class IpOption
+        {
+            public required string AdapterName { get; init; }
+            public required IPAddress Address { get; init; }
+
+            public string Display => $"{Address} - {AdapterName}";
         }
 
         /// Handle a new api-dsky client connection.
@@ -304,7 +324,8 @@ namespace DSKYBridge
             };
 
             // At this point, all XAML controls (including LocalIP) are created, so it's safe to use them.
-            LocalIP.Content = GetDisplayPrimaryIPv4();
+            _selectedLocalIp = GetPrimaryUnicastIPv4Address();
+            LocalIP.Content = FormatIpBlocks(_selectedLocalIp?.ToString());
             DskyIP.Content = "000 000 000 000";
             DskyIP2.Content = "000 000 000 000";
 
@@ -328,36 +349,16 @@ namespace DSKYBridge
             {
                 _mdns = new ServiceDiscovery();
 
-                // Instance name can be anything human-readable
-                var hostName = System.Net.Dns.GetHostName();
-                var instanceName = $"DSKY Bridge ({hostName})";
+                _mdnsHostName    = System.Net.Dns.GetHostName();
+                _mdnsInstanceName = $"DSKY Bridge ({_mdnsHostName})";
 
-                // Get primary IPv4 address to advertise
-                var primaryAddress = GetPrimaryUnicastIPv4Address();
-
-                if (primaryAddress == null)
+                // Use the currently selected local IP (from startup or user override)
+                if (_selectedLocalIp is null)
                 {
-                    Console.WriteLine("[mDNS] No suitable IPv4 address found to advertise.");
+                    _selectedLocalIp = GetPrimaryUnicastIPv4Address();
                 }
-                else
-                {
-                    var addresses = new[] { primaryAddress };
 
-                    Console.WriteLine("[mDNS] Advertising IP: " + primaryAddress);
-
-                    _mdnsProfile = new ServiceProfile(
-                        instanceName,
-                        MdnsServiceType,
-                        (ushort)WebSocketPort,
-                        addresses);
-
-                    _mdnsProfile.AddProperty("wsPath", "/ws");
-                    _mdnsProfile.AddProperty("version", "1.0.0");
-                    _mdnsProfile.AddProperty("mode", "bridge");
-                    _mdnsProfile.AddProperty("hostname", hostName);
-
-                    _mdns.Advertise(_mdnsProfile);
-                }
+                UpdateMdnsAdvertisedAddress(_selectedLocalIp);
             }
             catch (Exception ex)
             {
@@ -440,7 +441,6 @@ namespace DSKYBridge
             };
 
             _bridgeServer.Start();
-
 
             _pollTimer = new DispatcherTimer
             {
@@ -772,6 +772,138 @@ namespace DSKYBridge
             catch
             {
                 return null;
+            }
+        }
+
+        /// Update the advertised mDNS service to use the given IPv4 address.
+        private void UpdateMdnsAdvertisedAddress(IPAddress? address)
+        {
+            if (_mdns == null)
+                return;
+
+            try
+            {
+                // Stop advertising previous profile if any
+                if (_mdnsProfile != null)
+                {
+                    _mdns.Unadvertise(_mdnsProfile);
+                    _mdnsProfile = null;
+                }
+
+                if (address == null)
+                {
+                    Console.WriteLine("[mDNS] No suitable IPv4 address found to advertise.");
+                    return;
+                }
+
+                if (string.IsNullOrEmpty(_mdnsHostName))
+                {
+                    _mdnsHostName = System.Net.Dns.GetHostName();
+                }
+
+                if (string.IsNullOrEmpty(_mdnsInstanceName))
+                {
+                    _mdnsInstanceName = $"DSKY Bridge ({_mdnsHostName})";
+                }
+
+                var addresses = new[] { address };
+
+                Console.WriteLine("[mDNS] Advertising IP: " + address);
+
+                _mdnsProfile = new ServiceProfile(
+                    _mdnsInstanceName,
+                    MdnsServiceType,
+                    (ushort)WebSocketPort,
+                    addresses);
+
+                _mdnsProfile.AddProperty("wsPath", "/ws");
+                _mdnsProfile.AddProperty("version", "1.0.0");
+                _mdnsProfile.AddProperty("mode", "bridge");
+                _mdnsProfile.AddProperty("hostname", _mdnsHostName);
+
+                _mdns.Advertise(_mdnsProfile);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[mDNS] Failed to update mDNS advertising: {ex.Message}");
+            }
+        }
+
+        /// Apply the user's choice of local IP from the overlay menu.
+        private void ApplyLocalIpChoice(IpOption option)
+        {
+            if (option.Address.Equals(IPAddress.None))
+                return; // "no IPs" placeholder
+
+            _selectedLocalIp = option.Address;
+
+            // Update the display in the main UI
+            LocalIP.Content = FormatIpBlocks(option.Address.ToString());
+
+            // Update mDNS advertisement to use the chosen IP
+            UpdateMdnsAdvertisedAddress(option.Address);
+
+            // Hide the menu
+            Menu1.Visibility = Visibility.Collapsed;
+        }
+
+        /// Refresh the list of local IPv4 addresses for the overlay menu.
+        private void RefreshLocalIpList()
+        {
+            _ipOptions.Clear();
+
+            foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (ni.OperationalStatus != OperationalStatus.Up)
+                    continue;
+
+                if (ni.NetworkInterfaceType == NetworkInterfaceType.Loopback ||
+                    ni.NetworkInterfaceType == NetworkInterfaceType.Tunnel)
+                    continue;
+
+                IPInterfaceProperties props;
+                try
+                {
+                    props = ni.GetIPProperties();
+                }
+                catch
+                {
+                    continue;
+                }
+
+                foreach (var ua in props.UnicastAddresses
+                            .Where(u => u.Address.AddressFamily == AddressFamily.InterNetwork))
+                {
+                    _ipOptions.Add(new IpOption
+                    {
+                        AdapterName = ni.Name,
+                        Address     = ua.Address
+                    });
+                }
+            }
+
+            // Get the ListBox instance dynamically
+            var ipListBox = FindName("IpListBox") as ListBox;
+            if (ipListBox == null)
+            {
+                // If the XAML name doesn't match, we just bail out silently
+                return;
+            }
+
+            ipListBox.ItemsSource = null;
+            ipListBox.ItemsSource = _ipOptions;
+
+            if (_ipOptions.Count == 0)
+            {
+                // Optional: show a "no IPs" placeholder
+                ipListBox.ItemsSource = new[]
+                {
+                    new IpOption
+                    {
+                        AdapterName = "No active IPv4 addresses found",
+                        Address     = IPAddress.None
+                    }
+                };
             }
         }
 
@@ -1151,6 +1283,25 @@ namespace DSKYBridge
         {
             _dskyMode2 = LMC;
             SwArm2.Source = new BitmapImage(new Uri(ImgBase + "switch_dn.png"));
+        }
+
+        private void OpenMenu_Click(object sender, RoutedEventArgs e)
+        {
+            RefreshLocalIpList();
+            Menu1.Visibility = Visibility.Visible;
+        }
+
+        private void IpListBox_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            // Prefer the sender, which should already be the actual ListBox
+            var ipListBox = sender as ListBox ?? FindName("IpListBox") as ListBox;
+            if (ipListBox == null)
+                return;
+
+            if (ipListBox.SelectedItem is not IpOption option)
+                return;
+
+            ApplyLocalIpChoice(option);
         }
 
         private void FunctionalButton_MouseDown(object sender, MouseButtonEventArgs e)
