@@ -7,10 +7,10 @@
     <Product>DSKY-Bridge</Product>
     <Description>External DSKY Bridge for REENTRY simulator</Description>
 
-    <Version>1.2.2</Version>
-    <AssemblyVersion>1.2.2</AssemblyVersion>
-    <FileVersion>1.2.2</FileVersion>
-    <InformationalVersion>1.2.2</InformationalVersion>
+    <Version>1.2.3</Version>
+    <AssemblyVersion>1.2.3</AssemblyVersion>
+    <FileVersion>1.2.3</FileVersion>
+    <InformationalVersion>1.2.3</InformationalVersion>
 
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
