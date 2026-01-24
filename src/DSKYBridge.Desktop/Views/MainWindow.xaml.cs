@@ -994,9 +994,10 @@ namespace DSKYBridge
                 var nounD2 = agc.HideNoun ? "" : agc.NounD2;
 
                 // Same ranges we discussed earlier
-                int display = NormalizeBrightness(agc.BrightnessNumerics, 0.2f, 1.14117646f);
-                int status  = display;
+                int display = NormalizeBrightness(agc.BrightnessNumerics, 0.0f, 1.14117646f);
+                //int display = NormalizeBrightness(agc.BrightnessNumerics, 0.2f, 1.14117646f);
                 int keyboard = NormalizeBrightness(agc.BrightnessIntegral, 0.0f, 0.9411765f);
+                int status  = keyboard;
 
                 return new
                 {
@@ -1069,9 +1070,11 @@ namespace DSKYBridge
 
                 // You can tweak ranges for LM later if Reentry uses different ones;
                 // this will at least behave correctly for now.
-                int display = NormalizeBrightness(lgc.BrightnessNumerics, 0.2f, 1.14117646f);
+                int display = NormalizeBrightness(lgc.BrightnessNumerics, 0.2f, 1.4f);
+                //int display = NormalizeBrightness(lgc.BrightnessNumerics, 0.4f, 1.4f);
+                int keyboard = NormalizeBrightness(lgc.BrightnessIntegral, 0.2f, 1.4f);
+                //int keyboard = NormalizeBrightness(lgc.BrightnessIntegral, 0.4f, 1.4f);
                 int status  = display;
-                int keyboard = NormalizeBrightness(lgc.BrightnessIntegral, 0.0f, 0.9411765f);
 
                 return new
                 {
